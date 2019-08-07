@@ -11,6 +11,7 @@ GNU Lightning which uses the GPL license.
  */
 
 #define BOUNDS_CHECK
+#define ALLOW_IO
 
 #ifdef _WIN32
 #include <windows.h>
@@ -104,16 +105,20 @@ unsigned char *brainheck_compile(unsigned char *program, unsigned long long leve
 		switch(*pc)
 		{
 			case '.':
+				#ifdef ALLOW_IO
 				jit_prepare();
 				jit_ldr_uc(JIT_R0, JIT_V2);
 				jit_pushargr(JIT_R0);
 				jit_finishi(putchar);
+				#endif
 			break;
 			case ',':
+				#ifdef ALLOW_IO
 				jit_prepare();
 				jit_finishi(getchar);
 				jit_retval(JIT_R0);
 				jit_str_c(JIT_V2, JIT_R0);
+				#endif
 			break;
 			case '[': /* dont generate anycode. Thats done at the start */
 				if(!(pc = brainheck_compile(pc, level + 1)))
