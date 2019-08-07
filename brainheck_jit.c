@@ -10,7 +10,7 @@ This code is licensed under GPL because it links with
 GNU Lightning which uses the GPL license.
  */
 
-//#define BOUNDS_CHECK
+#define BOUNDS_CHECK
 #define ALLOW_IO
 
 #ifdef _WIN32
