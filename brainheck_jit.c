@@ -10,7 +10,7 @@ This code is licensed under GPL because it links with
 GNU Lightning which uses the GPL license.
  */
 
-#define BOUNDS_CHECK
+//#define BOUNDS_CHECK
 #define ALLOW_IO
 
 #ifdef _WIN32
@@ -28,13 +28,35 @@ typedef int (*brainjit)(unsigned char *cells, unsigned char *cell_max);
 static jit_state_t *_jit = NULL;
 
 
+static inline unsigned char *brainheck_optimize(unsigned char *program)
+{
+	unsigned char *pc = program;
+
+	/* optimize [-] to setting the cell to 0 */
+	if(*pc == '[' && *(pc + 1) == '-' && *(pc + 2) == ']')
+	{
+		jit_movi(JIT_R0, 0);
+		jit_str_c(JIT_V2, JIT_R0);
+
+		pc += 3;
+	}
+
+
+
+	return pc;
+}
+
 unsigned char *brainheck_compile(unsigned char *program, unsigned long long level)
 {
 	unsigned char *pc = program, has_start_bracket = 0;
 	unsigned long long op_counter = 1;
 	jit_node_t *open, *close, *branch, *inside_buffer, *buffer_test;
 
-	if(*program == '[' && level)
+	/* run here first _and_ in the loop */
+	if(!(pc = brainheck_optimize(pc)))
+		return NULL;
+
+	if(*pc == '[' && level)
 	{
 		has_start_bracket = 1;
 		//printf("open bracket\n");
@@ -50,7 +72,7 @@ unsigned char *brainheck_compile(unsigned char *program, unsigned long long leve
 
 		pc++;
 	}
-	else if(*program == '[' && !level)
+	else if(*pc == '[' && !level)
 	{
 		if(!(pc = brainheck_compile(pc, level + 1)))
 			return NULL;
@@ -60,7 +82,9 @@ unsigned char *brainheck_compile(unsigned char *program, unsigned long long leve
 
 	for(; *pc; pc++)
 	{
-		/* theres a chance this wont get called at the end so TODO fix */
+		if(!(pc = brainheck_optimize(pc)))
+			return NULL;
+		
 		if(*pc != *(pc + 1)) /* condense */
 		{
 			switch(*pc)
@@ -204,12 +228,12 @@ int brainheck(unsigned char *program, unsigned char *cells, unsigned long long c
 	}
 	
 
-	jit_disassemble();
+	/* jit_disassemble(); */
 
 	jit_destroy_state();
 	finish_jit();
 
-	for(int i = 0; i < 0; i++)
+	for(int i = 0; i < 10; i++)
 	{
 		printf(" %u ", cells[i]);
 	}
@@ -265,7 +289,8 @@ int main(int argc, char **argv)
 		fclose(file);
 	}
 	else
-		program = default_program;
+		//program = default_program;
+		program = "-[-]+";
 
 	if(brainheck(program, (unsigned char[30000]){0}, 30000))
 			fprintf(stderr, "error in input\n");
