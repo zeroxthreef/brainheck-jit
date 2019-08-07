@@ -10,6 +10,8 @@ This code is licensed under GPL because it links with
 GNU Lightning which uses the GPL license.
  */
 
+#define BOUNDS_CHECK
+
 #ifdef _WIN32
 #include <windows.h>
 #endif
@@ -65,18 +67,22 @@ unsigned char *brainheck_compile(unsigned char *program, unsigned long long leve
 				case '>':
 					jit_addi(JIT_V2, JIT_V2, op_counter);
 					/* test boundaries */
+					#ifdef BOUNDS_CHECK
 					buffer_test = jit_bler(JIT_V2, JIT_V3);
 					jit_reti(1);
 					inside_buffer = jit_label();
 					jit_patch_at(buffer_test, inside_buffer);
+					#endif
 				break;
 				case '<':
 					jit_subi(JIT_V2, JIT_V2, op_counter);
 					/* test boundaries */
+					#ifdef BOUNDS_CHECK
 					buffer_test = jit_bger(JIT_V2, JIT_V1);
 					jit_reti(2);
 					inside_buffer = jit_label();
 					jit_patch_at(buffer_test, inside_buffer);
+					#endif
 				break;
 				case '+':
 					jit_ldr_uc(JIT_R0, JIT_V2);
