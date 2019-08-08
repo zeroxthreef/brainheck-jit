@@ -10,7 +10,7 @@ This code is licensed under GPL because it links with
 GNU Lightning which uses the GPL license.
  */
 
-#define BOUNDS_CHECK
+//#define BOUNDS_CHECK
 #define ALLOW_IO
 
 #ifdef _WIN32
@@ -22,15 +22,95 @@ GNU Lightning which uses the GPL license.
 
 #include <lightning.h>
 
+/* some macros */
+
+#ifdef BOUNDS_CHECK
+#define MOVE_RIGHT(amount)\
+	jit_addi(JIT_V2, JIT_V2, amount);\
+	buffer_test = jit_bler(JIT_V2, JIT_V3);\
+	jit_reti(1);\
+	inside_buffer = jit_label();\
+	jit_patch_at(buffer_test, inside_buffer);
+#else
+#define MOVE_RIGHT(amount)\
+	jit_addi(JIT_V2, JIT_V2, amount);
+#endif
+
+#ifdef BOUNDS_CHECK
+#define MOVE_LEFT(amount)\
+	jit_subi(JIT_V2, JIT_V2, amount);\
+	buffer_test = jit_bger(JIT_V2, JIT_V1);\
+	jit_reti(2);\
+	inside_buffer = jit_label();\
+	jit_patch_at(buffer_test, inside_buffer);
+#else
+#define MOVE_LEFT(amount)\
+	jit_subi(JIT_V2, JIT_V2, amount);
+#endif
+
+#define ADD(amount)\
+jit_ldr_uc(JIT_R0, JIT_V2);\
+jit_addi(JIT_R0, JIT_R0, amount);\
+jit_str_c(JIT_V2, JIT_R0);
+
+#define SUB(amount)\
+jit_ldr_uc(JIT_R0, JIT_V2);\
+jit_subi(JIT_R0, JIT_R0, amount);\
+jit_str_c(JIT_V2, JIT_R0);
+
+
 typedef int (*brainjit)(unsigned char *cells, unsigned char *cell_max);
 
 /* I guess lightning needs this to be global */
 static jit_state_t *_jit = NULL;
 
 
-static inline unsigned char *brainheck_optimize(unsigned char *program)
+static inline unsigned long long count_sequence(unsigned char *program, unsigned char **pcc)
 {
 	unsigned char *pc = program;
+	unsigned long long amount = 1;
+
+	*pcc = pc;
+
+	if(!*pc)
+		return 0;
+
+	for(; *pc; pc++)
+	{
+		*pcc = pc;
+
+		if(*pc != *(pc + 1))
+			return amount;
+		else
+			amount++;
+	}
+
+	*pcc = pc;
+
+	return amount;
+}
+
+static inline unsigned char *brainheck_optimize_mulloop(unsigned char *program)
+{
+	unsigned char *pc = program, *temp_pc = NULL;
+	unsigned long amount, shift_distance;
+
+	if(*pc != '[' && *(pc + 1) != '-' && *(pc + 2) != '>')
+		return NULL;
+	
+	pc += 2;
+
+	shift_distance = count_sequence(pc, &temp_pc);
+
+
+
+
+	return pc;
+}
+
+static inline unsigned char *brainheck_optimize(unsigned char *program)
+{
+	unsigned char *pc = program, *temp_pc = NULL;
 
 	/* optimize [-] to setting the cell to 0 */
 	if(*pc == '[' && *(pc + 1) == '-' && *(pc + 2) == ']')
@@ -40,8 +120,10 @@ static inline unsigned char *brainheck_optimize(unsigned char *program)
 
 		pc += 3;
 	}
-
-
+	//else if((temp_pc = brainheck_optimize_mulloop(pc))) /* optimize multiplication loop */
+	{
+		//pc = temp_pc;
+	}
 
 	return pc;
 }
@@ -90,34 +172,16 @@ unsigned char *brainheck_compile(unsigned char *program, unsigned long long leve
 			switch(*pc)
 			{
 				case '>':
-					jit_addi(JIT_V2, JIT_V2, op_counter);
-					/* test boundaries */
-					#ifdef BOUNDS_CHECK
-					buffer_test = jit_bler(JIT_V2, JIT_V3);
-					jit_reti(1);
-					inside_buffer = jit_label();
-					jit_patch_at(buffer_test, inside_buffer);
-					#endif
+					MOVE_RIGHT(op_counter);
 				break;
 				case '<':
-					jit_subi(JIT_V2, JIT_V2, op_counter);
-					/* test boundaries */
-					#ifdef BOUNDS_CHECK
-					buffer_test = jit_bger(JIT_V2, JIT_V1);
-					jit_reti(2);
-					inside_buffer = jit_label();
-					jit_patch_at(buffer_test, inside_buffer);
-					#endif
+					MOVE_LEFT(op_counter);
 				break;
 				case '+':
-					jit_ldr_uc(JIT_R0, JIT_V2);
-					jit_addi(JIT_R0, JIT_R0, op_counter);
-					jit_str_c(JIT_V2, JIT_R0);
+					ADD(op_counter);
 				break;
 				case '-':
-					jit_ldr_uc(JIT_R0, JIT_V2);
-					jit_subi(JIT_R0, JIT_R0, op_counter);
-					jit_str_c(JIT_V2, JIT_R0);
+					SUB(op_counter);
 				break;
 			}
 
@@ -289,8 +353,7 @@ int main(int argc, char **argv)
 		fclose(file);
 	}
 	else
-		//program = default_program;
-		program = "-[-]+";
+		program = default_program;
 
 	if(brainheck(program, (unsigned char[30000]){0}, 30000))
 			fprintf(stderr, "error in input\n");
